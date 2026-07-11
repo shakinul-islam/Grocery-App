@@ -119,7 +119,7 @@ class _ProductScreenState extends State<ProductScreen> {
                       Expanded(
                         flex: 1,
                         child: DropdownButtonFormField<String>(
-                          value: selectedUnit,
+                          initialValue: selectedUnit,
                           decoration: InputDecoration(
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -318,7 +318,7 @@ class _ProductScreenState extends State<ProductScreen> {
                       Expanded(
                         flex: 1,
                         child: DropdownButtonFormField<String>(
-                          value: selectedUnit,
+                          initialValue: selectedUnit,
                           decoration: InputDecoration(
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),

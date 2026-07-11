@@ -10,7 +10,7 @@ import 'expense_screen.dart';
 import 'inventory_screen.dart';
 import 'detailed_sales_history.dart';
 import 'notes_screen.dart';
-import 'calculator_screen.dart'; 
+import 'calculator_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -46,6 +46,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   StreamSubscription<QuerySnapshot>? _salesSubscription;
   StreamSubscription<QuerySnapshot>? _customerSubscription;
+  StreamSubscription<DocumentSnapshot>? _settingsSubscription;
 
   @override
   void initState() {
@@ -57,6 +58,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _salesSubscription?.cancel();
     _customerSubscription?.cancel();
+    _settingsSubscription?.cancel();
     super.dispose();
   }
 
@@ -83,7 +85,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           double tempProfit = 0.0;
 
           for (var doc in snapshot.docs) {
-            var data = doc.data() as Map<String, dynamic>;
+            var data = doc.data();
 
             // নগদ ও বাকি আলাদা করা
             if (data['paymentType'] == 'নগদ') {
@@ -111,22 +113,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
 
     // ২. মোট বকেয়ার হিসাব (সব কাস্টমার মিলে)
-    if (_customerSubscription == null) {
-      _customerSubscription = FirebaseFirestore.instance
-          .collection('customers')
-          .snapshots()
-          .listen((snapshot) {
-            double tempTotalDue = 0.0;
-            for (var doc in snapshot.docs) {
-              tempTotalDue += (doc['dueAmount'] as num).toDouble();
-            }
-            if (mounted) {
-              setState(() {
-                totalDue = tempTotalDue;
-              });
-            }
-          });
-    }
+    _customerSubscription?.cancel();
+    _customerSubscription = FirebaseFirestore.instance
+        .collection('customers')
+        .snapshots()
+        .listen((snapshot) {
+          double tempTotalDue = 0.0;
+          for (var doc in snapshot.docs) {
+            tempTotalDue += (doc['dueAmount'] as num).toDouble();
+          }
+          if (mounted) {
+            setState(() {
+              totalDue = tempTotalDue;
+            });
+          }
+        });
+
+    // ৩. সেটিংসে পরিবর্তন হলে ড্যাশবোর্ড আপডেট হবে
+    _settingsSubscription?.cancel();
+    _settingsSubscription = FirebaseFirestore.instance
+        .collection('settings')
+        .doc('shop_info')
+        .snapshots()
+        .listen((snapshot) {
+          if (mounted) {
+            setState(() {});
+          }
+        });
   }
 
   @override
@@ -137,15 +150,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: Colors.indigo[800],
         foregroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.account_circle,
-            size: 30,
-          ), // প্রোফাইল পিকচার আইকন
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const SettingsScreen()),
-          ),
+        leading: StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('settings')
+              .doc('shop_info')
+              .snapshots(),
+          builder: (context, snapshot) {
+            String? profileImageUrl;
+            if (snapshot.hasData && snapshot.data!.exists) {
+              profileImageUrl = snapshot.data!['profileImageUrl'];
+            }
+
+            return Padding(
+              padding: const EdgeInsets.all(4.0),
+              child: GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SettingsScreen(),
+                  ),
+                ),
+                child: CircleAvatar(
+                  radius: 20,
+                  backgroundColor: Colors.white.withOpacity(0.2),
+                  backgroundImage: profileImageUrl != null
+                      ? NetworkImage(profileImageUrl)
+                      : null,
+                  child: profileImageUrl == null
+                      ? Icon(
+                          Icons.account_circle,
+                          size: 30,
+                          color: Colors.white.withOpacity(0.8),
+                        )
+                      : null,
+                ),
+              ),
+            );
+          },
         ),
         title: StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance
@@ -198,13 +239,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.indigo.withOpacity(0.05),
+                            color: Colors.indigo.withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
                         ],
                         border: Border.all(
-                          color: Colors.indigo.withOpacity(0.1),
+                          color: Colors.indigo.withValues(alpha: 0.1),
                           width: 1.5,
                         ),
                       ),
@@ -248,13 +289,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.indigo.withOpacity(0.05),
+                            color: Colors.indigo.withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
                         ],
                         border: Border.all(
-                          color: Colors.indigo.withOpacity(0.1),
+                          color: Colors.indigo.withValues(alpha: 0.1),
                           width: 1.5,
                         ),
                       ),
@@ -494,18 +535,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Expanded(
       child: Container(
         margin: const EdgeInsets.all(5.0),
-        padding: const EdgeInsets.all(10.0), // প্যাডিং কমানো হয়েছে
+        padding: const EdgeInsets.all(10.0),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
           ],
-          border: Border.all(color: color.withOpacity(0.15), width: 1.5),
+          border: Border.all(color: color.withValues(alpha: 0.15), width: 1.5),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -516,7 +557,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
+                    color: color.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(icon, color: color, size: 16),
@@ -536,9 +577,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
-            const SizedBox(
-              height: 8,
-            ), // Spacer এর বদলে SizedBox এবং Expanded ব্যবহার
+            const SizedBox(height: 8),
             Expanded(
               child: Align(
                 alignment: Alignment.centerLeft,
@@ -577,7 +616,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(0.08),
+              color: Colors.grey.withValues(alpha: 0.08),
               spreadRadius: 1,
               blurRadius: 8,
               offset: const Offset(0, 4),
@@ -597,8 +636,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        color.withOpacity(0.15),
-                        color.withOpacity(0.05),
+                        color.withValues(alpha: 0.15),
+                        color.withValues(alpha: 0.05),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,

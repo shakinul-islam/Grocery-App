@@ -118,7 +118,7 @@ class _DetailedSalesHistoryScreenState
     String headerText =
         _selectedFilter == 'নির্দিষ্ট তারিখ' && _selectedSpecificDate != null
         ? "${_toBanglaDigit(DateFormat('dd/MM/yyyy').format(_selectedSpecificDate!))} তারিখের"
-        : "$_selectedFilter";
+        : _selectedFilter;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),

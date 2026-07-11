@@ -453,14 +453,16 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting)
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
+                }
 
                 double totalPaid = 0.0;
                 if (snapshot.hasData) {
                   for (var doc in snapshot.data!.docs) {
-                    if (doc['type'] == 'Payment')
+                    if (doc['type'] == 'Payment') {
                       totalPaid += (doc['amount'] as num).toDouble();
+                    }
                   }
                 }
 

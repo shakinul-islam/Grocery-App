@@ -21,7 +21,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   final TextEditingController _noteController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
 
-  Map<String, double> _monthlyBudgets = {};
+  final Map<String, double> _monthlyBudgets = {};
   String? _selectedCategory;
 
   final Map<String, dynamic> _defaultBudgets = {
@@ -97,13 +97,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         );
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("মুছতে সমস্যা হয়েছে: $e"),
             backgroundColor: Colors.red,
           ),
         );
+      }
     }
   }
 
@@ -398,7 +399,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  value: _selectedCategory,
+                  initialValue: _selectedCategory,
                   decoration: InputDecoration(
                     labelText: "খরচের খাত",
                     border: OutlineInputBorder(
@@ -546,8 +547,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             .orderBy('timestamp', descending: true)
             .snapshots(),
         builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
           double totalMonthlyBudget = _monthlyBudgets.values.fold(
             0.0,
             (sum, item) => sum + item,
@@ -562,17 +564,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               final data = doc.data() as Map<String, dynamic>;
               String category = data['category'] ?? 'অন্যান্য';
               double amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
-              if (!categorySpent.containsKey(category))
+              if (!categorySpent.containsKey(category)) {
                 categorySpent[category] = 0.0;
+              }
               categorySpent[category] = categorySpent[category]! + amount;
               totalMonthlyExpense += amount;
-              if (!orderedCategories.contains(category))
+              if (!orderedCategories.contains(category)) {
                 orderedCategories.add(category);
+              }
             }
           }
           for (var category in _monthlyBudgets.keys) {
-            if (!orderedCategories.contains(category))
+            if (!orderedCategories.contains(category)) {
               orderedCategories.add(category);
+            }
           }
           double remainingBudget = totalMonthlyBudget - totalMonthlyExpense;
           double overallPercent = totalMonthlyBudget > 0
