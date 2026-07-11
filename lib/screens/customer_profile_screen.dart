@@ -1,5 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart'; // কপি করার জন্য
+import 'package:url_launcher/url_launcher.dart'; // কল করার জন্য
+import 'package:intl/intl.dart'; // সময় ফরম্যাটের জন্য
 
 class CustomerProfileScreen extends StatefulWidget {
   final String phone;
@@ -17,27 +21,157 @@ class CustomerProfileScreen extends StatefulWidget {
 
 class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   final TextEditingController _descController = TextEditingController();
-  bool _isSavingDesc = false;
+  final TextEditingController _nameEditController = TextEditingController();
+  final TextEditingController _phoneEditController = TextEditingController();
 
-  // ডেসক্রিপশন সেভ করার ফাংশন
-  void _saveDescription() async {
-    setState(() => _isSavingDesc = true);
-    await FirebaseFirestore.instance
-        .collection('customers')
-        .doc(widget.phone)
-        .update({'description': _descController.text.trim()});
-    setState(() => _isSavingDesc = false);
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("ডেসক্রিপশন সেভ হয়েছে!")));
-    }
+  Timer? _debounce;
+  bool _isDescInitialized = false; // ডেসক্রিপশন বারবার রিলোড না হওয়ার জন্য
+
+  @override
+  void dispose() {
+    _descController.dispose();
+    _nameEditController.dispose();
+    _phoneEditController.dispose();
+    _debounce?.cancel();
+    super.dispose();
   }
 
-  // টাকা জমা নেওয়ার পপ-আপ ফাংশন
+  // অটো-সেভ ডেসক্রিপশন ফাংশন (ব্যাকগ্রাউন্ডে সেভ হবে, স্ক্রিন রিলোড নেবে না)
+  void _onDescriptionChanged(String value) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 1000), () {
+      FirebaseFirestore.instance
+          .collection('customers')
+          .doc(widget.phone)
+          .update({'description': value.trim()});
+    });
+  }
+
+  // কল ফিচার
+  Future<void> _makeCall(String phoneNumber) async {
+    final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
+    await launchUrl(launchUri);
+  }
+
+  // কপি ফিচার
+  void _copyPhone(String phoneNumber) {
+    Clipboard.setData(ClipboardData(text: phoneNumber));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text("নম্বর কপি করা হয়েছে!")));
+  }
+
+  // এডিট প্রোফাইল ডায়লগ
+  void _showEditCustomerDialog(String currentName, String currentPhone) {
+    _nameEditController.text = currentName;
+    _phoneEditController.text = currentPhone;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("প্রোফাইল এডিট"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameEditController,
+              decoration: const InputDecoration(labelText: "নাম"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _phoneEditController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: "ফোন নম্বর"),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("বাতিল", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            onPressed: () async {
+              String newName = _nameEditController.text.trim();
+              String newPhone = _phoneEditController.text.trim();
+
+              if (newName.isEmpty || newPhone.isEmpty) return;
+
+              // যদি ফোন নম্বর পরিবর্তন করা হয়, তাহলে ডাটা ট্রান্সফার করতে হবে
+              if (newPhone != widget.phone) {
+                // প্রসেসিং এর জন্য লোডিং দেখানো
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) =>
+                      const Center(child: CircularProgressIndicator()),
+                );
+
+                DocumentReference oldDoc = FirebaseFirestore.instance
+                    .collection('customers')
+                    .doc(widget.phone);
+                DocumentReference newDoc = FirebaseFirestore.instance
+                    .collection('customers')
+                    .doc(newPhone);
+
+                var docSnapshot = await oldDoc.get();
+                if (docSnapshot.exists) {
+                  Map<String, dynamic> data =
+                      docSnapshot.data() as Map<String, dynamic>;
+                  data['name'] = newName;
+                  data['phone'] = newPhone;
+
+                  // নতুন ডকুমেন্টে ডাটা সেভ
+                  await newDoc.set(data);
+
+                  // লেজার (হিস্ট্রি) ট্রান্সফার
+                  var ledgerDocs = await oldDoc.collection('ledger').get();
+                  for (var ledgerDoc in ledgerDocs.docs) {
+                    await newDoc
+                        .collection('ledger')
+                        .doc(ledgerDoc.id)
+                        .set(ledgerDoc.data());
+                    await ledgerDoc.reference.delete();
+                  }
+
+                  // পুরানো ডকুমেন্ট রিমুভ করা
+                  await oldDoc.delete();
+
+                  if (context.mounted) {
+                    Navigator.pop(context); // লোডিং বন্ধ
+                    Navigator.pop(context); // এডিট ডায়লগ বন্ধ
+                    Navigator.pop(
+                      context,
+                    ); // প্রোফাইল স্ক্রিন থেকে বের করে লিস্টে পাঠানো
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("প্রোফাইল আপডেট হয়েছে!")),
+                    );
+                  }
+                }
+              } else {
+                // শুধু নাম পরিবর্তন হলে
+                await FirebaseFirestore.instance
+                    .collection('customers')
+                    .doc(widget.phone)
+                    .update({'name': newName});
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("নাম আপডেট হয়েছে!")),
+                  );
+                }
+              }
+            },
+            child: const Text("সেভ", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showReceivePaymentDialog(double currentDue) {
     final TextEditingController amountController = TextEditingController();
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -46,16 +180,19 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              "বর্তমান বাকি: ৳$currentDue",
+              "বর্তমান বাকি: ৳${currentDue.toStringAsFixed(0)}",
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.red,
+                fontSize: 16,
               ),
             ),
             const SizedBox(height: 15),
             TextField(
               controller: amountController,
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(
                 labelText: "জমা দেওয়ার পরিমাণ (৳)",
                 border: OutlineInputBorder(),
@@ -66,7 +203,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("বাতিল", style: TextStyle(color: Colors.grey)),
+            child: const Text("বাতিল"),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
@@ -74,7 +211,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               double? paidAmount = double.tryParse(
                 amountController.text.trim(),
               );
-
               if (paidAmount != null &&
                   paidAmount > 0 &&
                   paidAmount <= currentDue) {
@@ -82,13 +218,11 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                     .collection('customers')
                     .doc(widget.phone);
 
-                // মূল ব্যালেন্স থেকে মাইনাস করা
                 await customerRef.update({
                   'dueAmount': FieldValue.increment(-paidAmount),
                   'lastUpdated': FieldValue.serverTimestamp(),
                 });
 
-                // হিস্ট্রিতে জমার এন্ট্রি করা
                 await customerRef.collection('ledger').add({
                   'type': 'Payment',
                   'amount': paidAmount,
@@ -97,7 +231,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                 });
 
                 if (context.mounted) {
-                  Navigator.pop(context); // ডায়লগ বন্ধ করা
+                  Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text("টাকা জমা সফল হয়েছে!"),
@@ -108,9 +242,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text(
-                      "সঠিক পরিমাণ লিখুন (বর্তমান বাকির চেয়ে বেশি নয়)",
-                    ),
+                    content: Text("সঠিক পরিমাণ লিখুন!"),
                     backgroundColor: Colors.redAccent,
                   ),
                 );
@@ -135,7 +267,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // ১. কাস্টমার ইনফো, বকেয়া এবং ডেসক্রিপশন সেকশন
             StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('customers')
@@ -143,15 +274,14 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                   .snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return const LinearProgressIndicator();
-
                 var data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
                 double dueAmount =
                     (data['dueAmount'] as num?)?.toDouble() ?? 0.0;
 
-                // ডেসক্রিপশন টেক্সটফিল্ডে ডাটা সেট করা
-                if (_descController.text.isEmpty &&
-                    data['description'] != null) {
-                  _descController.text = data['description'];
+                // ডেসক্রিপশন শুধু প্রথমবার লোড হবে, টাইপ করার সময় লাফাবে না
+                if (!_isDescInitialized && data.containsKey('description')) {
+                  _descController.text = data['description'] ?? '';
+                  _isDescInitialized = true;
                 }
 
                 return Container(
@@ -169,7 +299,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  widget.name,
+                                  data['name'] ?? widget.name,
                                   style: const TextStyle(
                                     fontSize: 22,
                                     fontWeight: FontWeight.bold,
@@ -178,17 +308,42 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                                 const SizedBox(height: 5),
                                 Row(
                                   children: [
-                                    const Icon(
-                                      Icons.phone,
-                                      size: 16,
-                                      color: Colors.grey,
-                                    ),
-                                    const SizedBox(width: 5),
                                     Text(
-                                      widget.phone,
+                                      data['phone'] ?? widget.phone,
                                       style: const TextStyle(
                                         fontSize: 16,
                                         color: Colors.black54,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.copy,
+                                        size: 16,
+                                        color: Colors.grey,
+                                      ),
+                                      onPressed: () => _copyPhone(
+                                        data['phone'] ?? widget.phone,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.call,
+                                        size: 20,
+                                        color: Colors.green,
+                                      ),
+                                      onPressed: () => _makeCall(
+                                        data['phone'] ?? widget.phone,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.edit,
+                                        size: 20,
+                                        color: Colors.blue,
+                                      ),
+                                      onPressed: () => _showEditCustomerDialog(
+                                        data['name'] ?? widget.name,
+                                        data['phone'] ?? widget.phone,
                                       ),
                                     ),
                                   ],
@@ -196,13 +351,13 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                               ],
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          // ডানপাশের বকেয়া এবং টাকা জমা সেকশন
+
+                          // ডানদিকের বড় করা বকেয়া সেকশন
                           Container(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: Colors.red.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color: Colors.red.withValues(alpha: 0.3),
                               ),
@@ -210,23 +365,22 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                             child: Column(
                               children: [
                                 const Text(
-                                  "বর্তমান বাকি",
+                                  "বর্তমান বকেয়া",
                                   style: TextStyle(
                                     color: Colors.red,
-                                    fontSize: 12,
+                                    fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                                 Text(
-                                  "৳$dueAmount",
+                                  "৳${dueAmount.toStringAsFixed(0)}",
                                   style: const TextStyle(
                                     color: Colors.red,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w900,
                                   ),
                                 ),
-                                const SizedBox(height: 10),
-                                // টাকা জমা বাটন
+                                const SizedBox(height: 12),
                                 InkWell(
                                   onTap: () {
                                     if (dueAmount > 0) {
@@ -245,20 +399,20 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
+                                      horizontal: 20,
+                                      vertical: 8,
                                     ),
                                     decoration: BoxDecoration(
                                       color: dueAmount > 0
                                           ? Colors.green
                                           : Colors.grey,
-                                      borderRadius: BorderRadius.circular(5),
+                                      borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: const Text(
-                                      "টাকা জমা",
+                                      "জমা নিন",
                                       style: TextStyle(
                                         color: Colors.white,
-                                        fontSize: 12,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -272,40 +426,17 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       const SizedBox(height: 20),
                       const Text(
                         "নোট / ডেসক্রিপশন:",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 10),
                       TextField(
                         controller: _descController,
+                        onChanged:
+                            _onDescriptionChanged, // ব্যাকগ্রাউন্ডে অটো-সেভ হবে
                         maxLines: 3,
                         decoration: const InputDecoration(
-                          hintText:
-                              "কাস্টমার সম্পর্কে কিছু লিখে রাখুন (যেমন: ঠিকানা বা পেশা)...",
+                          hintText: "ডেসক্রিপশন...",
                           border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: ElevatedButton.icon(
-                          onPressed: _isSavingDesc ? null : _saveDescription,
-                          icon: _isSavingDesc
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.save, size: 18),
-                          label: const Text("সেভ করুন"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepPurple,
-                            foregroundColor: Colors.white,
-                          ),
                         ),
                       ),
                     ],
@@ -314,9 +445,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               },
             ),
 
-            const SizedBox(height: 10),
-
-            // ২. মোট পরিশোধ ও হিস্ট্রি (Ledger) সেকশন
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('customers')
@@ -325,23 +453,20 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                if (snapshot.connectionState == ConnectionState.waiting)
                   return const Center(child: CircularProgressIndicator());
-                }
 
                 double totalPaid = 0.0;
                 if (snapshot.hasData) {
                   for (var doc in snapshot.data!.docs) {
-                    if (doc['type'] == 'Payment') {
+                    if (doc['type'] == 'Payment')
                       totalPaid += (doc['amount'] as num).toDouble();
-                    }
                   }
                 }
 
                 return Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
                         width: double.infinity,
@@ -349,106 +474,72 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                         decoration: BoxDecoration(
                           color: Colors.green.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: Colors.green.withValues(alpha: 0.3),
-                          ),
                         ),
                         child: Text(
-                          "এযাবৎ মোট পরিশোধ: ৳$totalPaid",
+                          "এযাবৎ মোট পরিশোধ: ৳${totalPaid.toStringAsFixed(0)}",
                           style: const TextStyle(
                             color: Colors.green,
-                            fontSize: 16,
                             fontWeight: FontWeight.bold,
+                            fontSize: 16,
                           ),
                           textAlign: TextAlign.center,
                         ),
                       ),
                       const SizedBox(height: 20),
-                      const Text(
-                        "লেনদেনের হিস্ট্রি:",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: snapshot.data?.docs.length ?? 0,
+                        itemBuilder: (context, index) {
+                          var doc = snapshot.data!.docs[index];
+                          bool isPayment = doc['type'] == 'Payment';
 
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(20),
-                            child: Text("কোনো লেনদেন পাওয়া যায়নি।"),
-                          ),
-                        )
-                      else
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: snapshot.data!.docs.length,
-                          itemBuilder: (context, index) {
-                            var doc = snapshot.data!.docs[index];
-                            bool isPayment = doc['type'] == 'Payment';
-                            DateTime date =
-                                (doc['timestamp'] as Timestamp?)?.toDate() ??
-                                DateTime.now();
+                          // UTC টাইমকে BD টাইম (+6) এ কনভার্ট করা হচ্ছে
+                          DateTime date =
+                              (doc['timestamp'] as Timestamp?)
+                                  ?.toDate()
+                                  .toUtc() ??
+                              DateTime.now().toUtc();
+                          DateTime bdDate = date.add(const Duration(hours: 6));
+                          String formattedTime = DateFormat(
+                            'dd/MM/yyyy h:mm a',
+                          ).format(bdDate);
 
-                            return Card(
-                              elevation: 0.5,
-                              margin: const EdgeInsets.only(
-                                bottom: 8,
-                              ), // কার্ডের মাঝে একটু গ্যাপ
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ), // প্যাডিং বাড়ানো হলো
-                                leading: CircleAvatar(
-                                  backgroundColor: isPayment
-                                      ? Colors.green.withValues(alpha: 0.1)
-                                      : Colors.red.withValues(alpha: 0.1),
-                                  child: Icon(
-                                    isPayment
-                                        ? Icons.arrow_downward
-                                        : Icons.arrow_upward,
-                                    color: isPayment
-                                        ? Colors.green
-                                        : Colors.red,
-                                    size: 20,
-                                  ),
-                                ),
-                                title: Text(
-                                  doc['note'],
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    height: 1.4, // লাইনের মাঝে স্পেস
-                                  ),
-                                ),
-                                subtitle: Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: Text(
-                                    "${date.day}/${date.month}/${date.year}  ${date.hour}:${date.minute.toString().padLeft(2, '0')}",
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.black54,
-                                    ),
-                                  ),
-                                ),
-                                trailing: Text(
-                                  "৳${doc['amount']}",
-                                  style: TextStyle(
-                                    color: isPayment
-                                        ? Colors.green
-                                        : Colors.red,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: Icon(
+                                isPayment
+                                    ? Icons.arrow_downward
+                                    : Icons.arrow_upward,
+                                color: isPayment ? Colors.green : Colors.red,
+                              ),
+                              title: Text(
+                                doc['note'],
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                            );
-                          },
-                        ),
+                              subtitle: Text(
+                                formattedTime,
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              trailing: Text(
+                                "৳${doc['amount']}",
+                                style: TextStyle(
+                                  color: isPayment ? Colors.green : Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize:
+                                      15, // টাকার পরিমাণ বড় করে দেখানো হলো
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 );
