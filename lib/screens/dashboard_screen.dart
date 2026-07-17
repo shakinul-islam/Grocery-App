@@ -172,7 +172,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: CircleAvatar(
                   radius: 20,
-                  backgroundColor: Colors.white.withOpacity(0.2),
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
                   backgroundImage: profileImageUrl != null
                       ? NetworkImage(profileImageUrl)
                       : null,
@@ -180,7 +180,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ? Icon(
                           Icons.account_circle,
                           size: 30,
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white.withValues(alpha: 0.8),
                         )
                       : null,
                 ),

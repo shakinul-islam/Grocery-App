@@ -59,7 +59,7 @@ class _NotesScreenState extends State<NotesScreen>
     super.dispose();
   }
 
-  // নোটিফিকেশন ইনিশিয়ালাইজেশন (v22+ Named Syntax)
+  // নোটিফিকেশন ইনিশিয়ালাইজেশন এবং পারমিশন রিকোয়েস্ট
   void _initializeNotifications() async {
     tz.initializeTimeZones();
     const AndroidInitializationSettings initializationSettingsAndroid =
@@ -74,9 +74,16 @@ class _NotesScreenState extends State<NotesScreen>
         // নোটিফিকেশনে ট্যাপ করলে এখানে অ্যাকশন হ্যান্ডেল করতে পারবেন
       },
     );
+
+    // Android 13+ এর জন্য নোটিফিকেশন পারমিশন চাওয়া
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.requestNotificationsPermission();
   }
 
-  // রিমাইন্ডার শিডিউল করা (v22+ Named Syntax)
+  // রিমাইন্ডার শিডিউল করা (Fixed Syntax)
   Future<void> _scheduleNotification(
     int id,
     String title,
@@ -84,11 +91,15 @@ class _NotesScreenState extends State<NotesScreen>
     DateTime scheduledTime,
   ) async {
     await flutterLocalNotificationsPlugin.zonedSchedule(
-      id: id,
-      title: title,
-      body: body,
-      scheduledDate: tz.TZDateTime.from(scheduledTime, tz.local),
+      id: id, // আগে নাম দিতে হবে
+      title: title, // আগে নাম দিতে হবে
+      body: body, // আগে নাম দিতে হবে
+      scheduledDate: tz.TZDateTime.from(
+        scheduledTime,
+        tz.local,
+      ), // নাম দিতে হবে
       notificationDetails: const NotificationDetails(
+        // নাম দিতে হবে
         android: AndroidNotificationDetails(
           'note_reminder_channel',
           'Note Reminders',
@@ -101,6 +112,7 @@ class _NotesScreenState extends State<NotesScreen>
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      // uiLocalNotificationDateInterpretation লাইনটি পুরোপুরি বাদ দেওয়া হয়েছে
     );
   }
 
@@ -163,14 +175,13 @@ class _NotesScreenState extends State<NotesScreen>
       String noteContent = _noteController.text;
 
       if (_isEditing && _editingNoteId != null) {
-        // এডিট মোড - নোট আপডেট করা
         DocumentReference docRef = FirebaseFirestore.instance
             .collection('notes')
             .doc(_editingNoteId);
 
-        // পুরাতন রিমাইন্ডার থাকলে নোটিফিকেশন ক্যানসেল করা
         DocumentSnapshot oldNote = await docRef.get();
-        if (oldNote['reminderTime'] != null) {
+        var oldData = oldNote.data() as Map<String, dynamic>?;
+        if (oldData != null && oldData['reminderTime'] != null) {
           try {
             await flutterLocalNotificationsPlugin.cancel(
               id: _editingNoteId!.hashCode,
@@ -180,7 +191,6 @@ class _NotesScreenState extends State<NotesScreen>
           }
         }
 
-        // নোট আপডেট করা
         await docRef.update({
           'content': noteContent,
           'reminderTime': _selectedReminderTime != null
@@ -189,7 +199,6 @@ class _NotesScreenState extends State<NotesScreen>
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // নতুন রিমাইন্ডার সেট করা থাকলে নোটিফিকেশন শিডিউল করা
         if (_selectedReminderTime != null) {
           int notificationId = _editingNoteId!.hashCode;
           try {
@@ -223,7 +232,6 @@ class _NotesScreenState extends State<NotesScreen>
           );
         }
       } else {
-        // নতুন নোট অ্যাড করা
         DocumentReference docRef = await FirebaseFirestore.instance
             .collection('notes')
             .add({
@@ -234,7 +242,6 @@ class _NotesScreenState extends State<NotesScreen>
                   : null,
             });
 
-        // রিমাইন্ডার সেট করা থাকলে নোটিফিকেশন শিডিউল করা হবে
         if (_selectedReminderTime != null) {
           int notificationId = docRef.id.hashCode;
           try {
@@ -277,8 +284,10 @@ class _NotesScreenState extends State<NotesScreen>
     setState(() {
       _isEditing = true;
       _editingNoteId = note.id;
-      _noteController.text = note['content'] ?? '';
-      _selectedReminderTime = note['reminderTime']?.toDate();
+      var noteData = note.data() as Map<String, dynamic>;
+      _noteController.text = noteData['content'] ?? '';
+      _selectedReminderTime = (noteData['reminderTime'] as Timestamp?)
+          ?.toDate();
     });
 
     _showAddNoteBottomSheet();
@@ -325,8 +334,8 @@ class _NotesScreenState extends State<NotesScreen>
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             ),
             onPressed: () async {
-              // নোটিফিকেশন ক্যানসেল করা (v22+ Named Syntax)
-              if (note['reminderTime'] != null) {
+              var noteData = note.data() as Map<String, dynamic>?;
+              if (noteData != null && noteData['reminderTime'] != null) {
                 try {
                   await flutterLocalNotificationsPlugin.cancel(
                     id: note.id.hashCode,
@@ -358,7 +367,7 @@ class _NotesScreenState extends State<NotesScreen>
     );
   }
 
-  // নতুন নোট অ্যাড করার বটম শিট (এডিট সাপোর্ট সহ)
+  // নতুন নোট অ্যাড করার বটম শিট
   void _showAddNoteBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -382,7 +391,6 @@ class _NotesScreenState extends State<NotesScreen>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Handle bar
                   Center(
                     child: Container(
                       width: 40,
@@ -394,8 +402,6 @@ class _NotesScreenState extends State<NotesScreen>
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Header
                   Row(
                     children: [
                       Container(
@@ -450,8 +456,6 @@ class _NotesScreenState extends State<NotesScreen>
                     ],
                   ),
                   const SizedBox(height: 20),
-
-                  // Note input
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.grey.shade50,
@@ -475,8 +479,6 @@ class _NotesScreenState extends State<NotesScreen>
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // Reminder section
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -551,8 +553,6 @@ class _NotesScreenState extends State<NotesScreen>
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // Save button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -598,7 +598,6 @@ class _NotesScreenState extends State<NotesScreen>
     );
   }
 
-  // Search functionality - toggle search
   void _toggleSearch() {
     setState(() {
       _isSearching = !_isSearching;
@@ -618,7 +617,7 @@ class _NotesScreenState extends State<NotesScreen>
             ? Container(
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: TextField(
@@ -627,18 +626,20 @@ class _NotesScreenState extends State<NotesScreen>
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     hintText: "নোট খুঁজুন...",
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                    hintStyle: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                     prefixIcon: Icon(
                       Icons.search,
-                      color: Colors.white.withOpacity(0.7),
+                      color: Colors.white.withValues(alpha: 0.7),
                       size: 20,
                     ),
                     suffixIcon: IconButton(
                       icon: Icon(
                         Icons.close,
-                        color: Colors.white.withOpacity(0.7),
+                        color: Colors.white.withValues(alpha: 0.7),
                         size: 20,
                       ),
                       onPressed: () {
@@ -655,7 +656,7 @@ class _NotesScreenState extends State<NotesScreen>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
@@ -754,11 +755,12 @@ class _NotesScreenState extends State<NotesScreen>
             );
           }
 
-          // Filter notes based on search query
           List<QueryDocumentSnapshot> filteredNotes = snapshot.data!.docs;
           if (_searchQuery.isNotEmpty) {
             filteredNotes = filteredNotes.where((note) {
-              String content = note['content']?.toString().toLowerCase() ?? '';
+              var noteData = note.data() as Map<String, dynamic>;
+              String content =
+                  noteData['content']?.toString().toLowerCase() ?? '';
               return content.contains(_searchQuery);
             }).toList();
           }
@@ -793,18 +795,16 @@ class _NotesScreenState extends State<NotesScreen>
             itemCount: filteredNotes.length,
             itemBuilder: (context, index) {
               var note = filteredNotes[index];
-              Timestamp? reminderTimestamp = note['reminderTime'];
+              var noteData = note.data() as Map<String, dynamic>;
+              Timestamp? reminderTimestamp = noteData['reminderTime'];
               DateTime? reminderDate = reminderTimestamp?.toDate();
 
-              // নিরাপদে চেক করা হচ্ছে updatedAt ফিল্ড আছে কিনা
-              bool hasUpdatedAt =
-                  note.data()?.containsKey('updatedAt') ?? false;
+              bool hasUpdatedAt = noteData.containsKey('updatedAt');
               Timestamp? updatedTimestamp = hasUpdatedAt
-                  ? note['updatedAt']
+                  ? noteData['updatedAt']
                   : null;
 
-              // Highlight matched text
-              String content = note['content'] ?? '';
+              String content = noteData['content'] ?? '';
               bool isMatch =
                   _searchQuery.isNotEmpty &&
                   content.toLowerCase().contains(_searchQuery);
@@ -817,7 +817,7 @@ class _NotesScreenState extends State<NotesScreen>
                   boxShadow: [
                     BoxShadow(
                       color: isMatch
-                          ? const Color(0xFF6C63FF).withOpacity(0.1)
+                          ? const Color(0xFF6C63FF).withValues(alpha: 0.1)
                           : Colors.grey.shade200,
                       blurRadius: 20,
                       offset: const Offset(0, 8),
@@ -876,15 +876,15 @@ class _NotesScreenState extends State<NotesScreen>
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    gradient: LinearGradient(
+                                    gradient: const LinearGradient(
                                       colors: [
-                                        const Color(0xFF6C63FF),
-                                        const Color(0xFF8B83FF),
+                                        Color(0xFF6C63FF),
+                                        Color(0xFF8B83FF),
                                       ],
                                     ),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: Text(
+                                  child: const Text(
                                     "ম্যাচ",
                                     style: TextStyle(
                                       fontSize: 9,
@@ -924,34 +924,38 @@ class _NotesScreenState extends State<NotesScreen>
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    const Color(0xFF6C63FF).withOpacity(0.1),
-                                    const Color(0xFF6C63FF).withOpacity(0.05),
+                                    const Color(
+                                      0xFF6C63FF,
+                                    ).withValues(alpha: 0.1),
+                                    const Color(
+                                      0xFF6C63FF,
+                                    ).withValues(alpha: 0.05),
                                   ],
                                 ),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: const Color(
                                     0xFF6C63FF,
-                                  ).withOpacity(0.2),
+                                  ).withValues(alpha: 0.2),
                                 ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
+                                  const Icon(
                                     Icons.alarm,
                                     size: 14,
-                                    color: const Color(0xFF6C63FF),
+                                    color: Color(0xFF6C63FF),
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
                                     DateFormat(
                                       'MMM dd, yyyy - hh:mm a',
                                     ).format(reminderDate),
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: const Color(0xFF6C63FF),
+                                      color: Color(0xFF6C63FF),
                                     ),
                                   ),
                                 ],
@@ -974,7 +978,6 @@ class _NotesScreenState extends State<NotesScreen>
           backgroundColor: const Color(0xFF6C63FF),
           elevation: 8,
           onPressed: () {
-            // Close search if open
             if (_isSearching) {
               setState(() {
                 _isSearching = false;
@@ -996,7 +999,6 @@ class _NotesScreenState extends State<NotesScreen>
     );
   }
 
-  // Helper method to build highlighted text
   Widget _buildHighlightedText(String text, String query, TextStyle style) {
     if (query.isEmpty || text.isEmpty) {
       return Text(text, style: style);
@@ -1010,24 +1012,21 @@ class _NotesScreenState extends State<NotesScreen>
     while (start < text.length) {
       final int matchIndex = lowerText.indexOf(lowerQuery, start);
       if (matchIndex == -1) {
-        // No more matches
         spans.add(TextSpan(text: text.substring(start), style: style));
         break;
       }
 
-      // Add text before match
       if (matchIndex > start) {
         spans.add(
           TextSpan(text: text.substring(start, matchIndex), style: style),
         );
       }
 
-      // Add highlighted match
       spans.add(
         TextSpan(
           text: text.substring(matchIndex, matchIndex + query.length),
           style: style.copyWith(
-            backgroundColor: const Color(0xFF6C63FF).withOpacity(0.2),
+            backgroundColor: const Color(0xFF6C63FF).withValues(alpha: 0.2),
             fontWeight: FontWeight.bold,
             color: const Color(0xFF6C63FF),
           ),
@@ -1041,8 +1040,4 @@ class _NotesScreenState extends State<NotesScreen>
       text: TextSpan(children: spans, style: style),
     );
   }
-}
-
-extension on Object? {
-  bool? containsKey(String s) {}
 }

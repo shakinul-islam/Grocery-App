@@ -15,6 +15,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Kotlin DSL (kts) এর জন্য সঠিক পদ্ধতি
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -26,6 +28,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -45,4 +48,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+// ফায়ারবেস বা অন্যান্য প্যাকেজের জন্য প্রয়োজনীয় ডিপেন্ডেন্সি
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
