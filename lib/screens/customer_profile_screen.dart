@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+// আপডেট: ইউজারের uid নেওয়ার জন্য FirebaseAuth ইমপোর্ট করা হলো
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart'; // কপি করার জন্য
 import 'package:url_launcher/url_launcher.dart'; // কল করার জন্য
 import 'package:intl/intl.dart'; // সময় ফরম্যাটের জন্য
@@ -40,7 +42,12 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   void _onDescriptionChanged(String value) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 1000), () {
+      // আপডেট: ইউজারের নিজস্ব ডিরেক্টরিতে ডেসক্রিপশন সেভ করা হচ্ছে
+      String uid = FirebaseAuth.instance.currentUser!.uid;
+
       FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
           .collection('customers')
           .doc(widget.phone)
           .update({'description': value.trim()});
@@ -98,6 +105,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
 
               if (newName.isEmpty || newPhone.isEmpty) return;
 
+              // আপডেট: ডাটা ট্রান্সফারের জন্য ইউজারের uid সংগ্রহ
+              String uid = FirebaseAuth.instance.currentUser!.uid;
+
               // যদি ফোন নম্বর পরিবর্তন করা হয়, তাহলে ডাটা ট্রান্সফার করতে হবে
               if (newPhone != widget.phone) {
                 // প্রসেসিং এর জন্য লোডিং দেখানো
@@ -108,10 +118,16 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       const Center(child: CircularProgressIndicator()),
                 );
 
+                // আপডেট: পুরানো এবং নতুন ডকুমেন্টের পাথ ইউজারের ডিরেক্টরি অনুযায়ী করা হলো
                 DocumentReference oldDoc = FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
                     .collection('customers')
                     .doc(widget.phone);
+
                 DocumentReference newDoc = FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
                     .collection('customers')
                     .doc(newPhone);
 
@@ -151,10 +167,14 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                 }
               } else {
                 // শুধু নাম পরিবর্তন হলে
+                // আপডেট: নাম আপডেটের জন্য সঠিক পাথ সেট করা হলো
                 await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
                     .collection('customers')
                     .doc(widget.phone)
                     .update({'name': newName});
+
                 if (context.mounted) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -214,7 +234,12 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               if (paidAmount != null &&
                   paidAmount > 0 &&
                   paidAmount <= currentDue) {
+                // আপডেট: পেমেন্ট রিসিভ করার সময় ইউজারের নিজস্ব ডিরেক্টরি কল করা হলো
+                String uid = FirebaseAuth.instance.currentUser!.uid;
+
                 DocumentReference customerRef = FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
                     .collection('customers')
                     .doc(widget.phone);
 
@@ -257,6 +282,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // আপডেট: build মেথডের ভেতরে uid ডিক্লেয়ার করা হলো যাতে নিচের StreamBuilder গুলো এটি পায়
+    final String uid = FirebaseAuth.instance.currentUser!.uid;
+
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
@@ -268,7 +296,10 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         child: Column(
           children: [
             StreamBuilder<DocumentSnapshot>(
+              // আপডেট: কাস্টমারের ডেটা ফেচ করার জন্য ইউজারের নিজস্ব পাথ
               stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(uid)
                   .collection('customers')
                   .doc(widget.phone)
                   .snapshots(),
@@ -446,7 +477,10 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
             ),
 
             StreamBuilder<QuerySnapshot>(
+              // আপডেট: কাস্টমারের লেজার/হিস্ট্রি ফেচ করার জন্য ইউজারের নিজস্ব পাথ
               stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(uid)
                   .collection('customers')
                   .doc(widget.phone)
                   .collection('ledger')

@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+// আপডেট: ইউজারের uid নেওয়ার জন্য FirebaseAuth ইমপোর্ট করা হলো
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -11,15 +13,32 @@ class SalesScreen extends StatefulWidget {
 }
 
 class _SalesScreenState extends State<SalesScreen> {
-  final CollectionReference _products = FirebaseFirestore.instance.collection(
-    'products',
-  );
-  final CollectionReference _sales = FirebaseFirestore.instance.collection(
-    'sales',
-  );
-  final CollectionReference _customers = FirebaseFirestore.instance.collection(
-    'customers',
-  );
+  // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে products কালেকশন নেওয়ার জন্য getter তৈরি করা হলো
+  CollectionReference get _products {
+    String uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('products');
+  }
+
+  // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে sales কালেকশন নেওয়ার জন্য getter তৈরি করা হলো
+  CollectionReference get _sales {
+    String uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('sales');
+  }
+
+  // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে customers কালেকশন নেওয়ার জন্য getter তৈরি করা হলো
+  CollectionReference get _customers {
+    String uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('customers');
+  }
 
   // ফাস্ট পারফরম্যান্সের জন্য স্ট্রিমটি আগে থেকে ডিফাইন করা হলো
   late Stream<QuerySnapshot> _productsStream;
@@ -546,7 +565,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         : 0.0;
                     double availableStock = currentStock - qtyInCart;
 
-                    // একক অনুযায়ী স্টেপ নির্ধারণ (কেজি বা লিটার হলে ০.৫ করে, পিস হলে ১.০ করে)
+                    // একক অনুযায়ী স্টেপ নির্ধারণ (কেজি বা লিটার হলে ০.৫ করে, পিস হলে ১.০ করে)
                     double step = (unit == 'কেজি' || unit == 'লিটার')
                         ? 0.5
                         : 1.0;

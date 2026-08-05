@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
-import 'login_screen.dart';
+import 'auth_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -22,9 +22,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
 
-  final DocumentReference _settingsRef = FirebaseFirestore.instance
-      .collection('settings')
-      .doc('shop_info');
+  // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে সেটিংস লোড করার জন্য getter তৈরি করা হলো
+  DocumentReference get _settingsRef {
+    String uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('settings')
+        .doc('shop_info');
+  }
 
   bool _isLoading = false;
   bool _isUploadingImage = false;
@@ -155,15 +161,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _exportData(String format) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("ডাটা $format ফরম্যাটে ডাউনলোড হচ্ছে..."),
-        backgroundColor: Colors.amber[800],
-      ),
-    );
-  }
-
   void _confirmLogout() {
     showDialog(
       context: context,
@@ -203,7 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      MaterialPageRoute(builder: (context) => const AuthScreen()),
       (route) => false,
     );
   }
@@ -259,6 +256,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ইউজারের লগইন করা জিমেইল নেওয়া হচ্ছে
+    final String userEmail =
+        FirebaseAuth.instance.currentUser?.email ?? "No Email";
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FC),
       appBar: AppBar(
@@ -341,6 +342,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    // আপডেট: ইউজারের জিমেইল দেখানো হচ্ছে
+                    Text(
+                      userEmail,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[600],
+                      ),
+                    ),
                     const SizedBox(height: 30),
 
                     _buildTextField(
@@ -397,53 +408,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
 
-            _buildSectionHeader(
-              "ব্যাকআপ এবং এক্সপোর্ট",
-              Icons.cloud_download_rounded,
-            ),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(
-                      Icons.picture_as_pdf_rounded,
-                      color: Colors.redAccent,
-                    ),
-                    title: const Text(
-                      "PDF হিসেবে ডাউনলোড করুন",
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    trailing: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 16,
-                    ),
-                    onTap: () => _exportData("PDF"),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.table_chart_rounded,
-                      color: Colors.green,
-                    ),
-                    title: const Text(
-                      "Excel (CSV) হিসেবে ডাউনলোড করুন",
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    trailing: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 16,
-                    ),
-                    onTap: () => _exportData("Excel"),
-                  ),
-                ],
-              ),
-            ),
             const SizedBox(height: 30),
 
             SizedBox(

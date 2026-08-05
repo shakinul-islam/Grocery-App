@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+// আপডেট: ইউজারের uid নেওয়ার জন্য FirebaseAuth ইমপোর্ট করা হলো
+import 'package:firebase_auth/firebase_auth.dart';
 import 'product_screen.dart';
 import 'sales_screen.dart';
 import 'due_screen.dart';
@@ -73,8 +75,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Timestamp startTimestamp = Timestamp.fromDate(startOfMonth);
     Timestamp endTimestamp = Timestamp.fromDate(endOfMonth);
 
+    // আপডেট: ইউজারের uid সংগ্রহ করা হলো
+    String uid = FirebaseAuth.instance.currentUser!.uid;
+
     // ১. এই মাসের নগদ, বাকি বিক্রি এবং লাভের হিসাব
+    // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে sales কালেকশন কল করা হলো
     _salesSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
         .collection('sales')
         .where('timestamp', isGreaterThanOrEqualTo: startTimestamp)
         .where('timestamp', isLessThan: endTimestamp)
@@ -113,8 +121,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
 
     // ২. মোট বকেয়ার হিসাব (সব কাস্টমার মিলে)
+    // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে customers কালেকশন কল করা হলো
     _customerSubscription?.cancel();
     _customerSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
         .collection('customers')
         .snapshots()
         .listen((snapshot) {
@@ -130,8 +141,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
 
     // ৩. সেটিংসে পরিবর্তন হলে ড্যাশবোর্ড আপডেট হবে
+    // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে settings কালেকশন কল করা হলো
     _settingsSubscription?.cancel();
     _settingsSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
         .collection('settings')
         .doc('shop_info')
         .snapshots()
@@ -144,6 +158,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // আপডেট: ইউজারের uid সংগ্রহ করা হলো AppBar এর ডাটা ফেচ করার জন্য
+    final String uid = FirebaseAuth.instance.currentUser!.uid;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FC),
       appBar: AppBar(
@@ -151,7 +168,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         leading: StreamBuilder<DocumentSnapshot>(
+          // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে shop_info ফেচ করা হচ্ছে
           stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
               .collection('settings')
               .doc('shop_info')
               .snapshots(),
@@ -189,7 +209,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           },
         ),
         title: StreamBuilder<DocumentSnapshot>(
+          // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে shop_info ফেচ করা হচ্ছে
           stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
               .collection('settings')
               .doc('shop_info')
               .snapshots(),
@@ -525,7 +548,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ফ্লেক্সিবল সামারি কার্ড ডিজাইন (ওভারফ্লো ফিক্স করা হয়েছে)
+  // ফ্লেক্সিবল সামারি কার্ড ডিজাইন (ওভারফ্লো ফিক্স করা হয়েছে)
   Widget _buildFlexibleSummaryCard({
     required String title,
     required String amount,

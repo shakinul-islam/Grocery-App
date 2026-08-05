@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
+// আপডেট: ইউজারের uid নেওয়ার জন্য FirebaseAuth ইমপোর্ট করা হলো
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -17,7 +19,7 @@ class _ReportScreenState extends State<ReportScreen> {
   double todayProfit = 0.0;
   double monthlyProfit = 0.0;
   double monthlyExpense = 0.0;
-  double monthlyCost = 0.0; // ক্রয়মূল্য
+  double monthlyCost = 0.0; // ক্রয়মূল্য
 
   // মাস এবং বছরের জন্য ভেরিয়েবল (ফিল্টার)
   int selectedMonth = DateTime.now().month;
@@ -57,22 +59,31 @@ class _ReportScreenState extends State<ReportScreen> {
     try {
       setState(() => isLoading = true);
 
+      // আপডেট: বর্তমান ইউজারের UID নেওয়া হলো
+      String uid = FirebaseAuth.instance.currentUser!.uid;
+
       DateTime now = DateTime.now();
       DateTime startOfToday = DateTime(now.year, now.month, now.day);
 
-      // সিলেক্ট করা মাস ও বছর অনুযায়ী সময় নির্ধারণ
+      // সিলেক্ট করা মাস ও বছর অনুযায়ী সময় নির্ধারণ
       DateTime startOfSelectedMonth = DateTime(selectedYear, selectedMonth, 1);
       DateTime endOfSelectedMonth = selectedMonth < 12
           ? DateTime(selectedYear, selectedMonth + 1, 1)
           : DateTime(selectedYear + 1, 1, 1);
 
       // ১. বিক্রির ডেটা আনা
+      // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে sales কালেকশন কল করা হলো
       QuerySnapshot salesSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
           .collection('sales')
           .get();
 
       // ২. খরচের ডেটা আনা (সিলেক্ট করা মাসের জন্য)
+      // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে expenses কালেকশন কল করা হলো
       QuerySnapshot expenseSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
           .collection('expenses')
           .where(
             'timestamp',
@@ -97,7 +108,7 @@ class _ReportScreenState extends State<ReportScreen> {
             (doc.data() as Map<String, dynamic>)['amount'] as num? ?? 0.0;
       }
 
-      // বিক্রি, লাভ ও ক্রয়মূল্য ক্যালকুলেশন
+      // বিক্রি, লাভ ও ক্রয়মূল্য ক্যালকুলেশন
       for (var doc in salesSnapshot.docs) {
         Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
         if (data['timestamp'] == null) continue;
@@ -117,7 +128,7 @@ class _ReportScreenState extends State<ReportScreen> {
           saleCost += (buyPrice * qty);
         }
 
-        // আজকের হিসাব (সবসময় রিয়েল-টাইম আজকের দিন ট্র্যাক করবে)
+        // আজকের হিসাব (সবসময় রিয়েল-টাইম আজকের দিন ট্র্যাক করবে)
         if (saleDate.isAfter(startOfToday) ||
             saleDate.isAtSameMomentAs(startOfToday)) {
           tSales += saleAmount;
@@ -269,7 +280,7 @@ class _ReportScreenState extends State<ReportScreen> {
 
                     // ২. সামারি কার্ডস গ্রিড (Expanded Layout)
                     Expanded(
-                      flex: 32, // স্ক্রিনের সাইজ অনুযায়ী জায়গা নেবে
+                      flex: 32, // স্ক্রিনের সাইজ অনুযায়ী জায়গা নেবে
                       child: GridView.count(
                         crossAxisCount: 2,
                         childAspectRatio: 2.4,
@@ -304,7 +315,7 @@ class _ReportScreenState extends State<ReportScreen> {
 
                     // ৩. ডোনাট চার্ট প্যানেল (Expanded Layout)
                     Expanded(
-                      flex: 55, // স্ক্রিনের মেইন বড় অংশ চার্টকে দেওয়া হয়েছে
+                      flex: 55, // স্ক্রিনের মেইন বড় অংশ চার্টকে দেওয়া হয়েছে
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -468,12 +479,15 @@ class _ReportScreenState extends State<ReportScreen> {
               ),
             ),
             const SizedBox(width: 6),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.black54,
-                fontWeight: FontWeight.bold,
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.black54,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 2,
               ),
             ),
           ],

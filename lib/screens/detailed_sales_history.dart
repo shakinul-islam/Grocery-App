@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+// আপডেট: ইউজারের uid নেওয়ার জন্য FirebaseAuth ইমপোর্ট করা হলো
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
 class DetailedSalesHistoryScreen extends StatefulWidget {
@@ -111,6 +113,9 @@ class _DetailedSalesHistoryScreenState
 
   @override
   Widget build(BuildContext context) {
+    // আপডেট: ফায়ারবেস থেকে ডেটা ফেচ করার জন্য বর্তমান ইউজারের UID সংগ্রহ করা হলো
+    final String uid = FirebaseAuth.instance.currentUser!.uid;
+
     DateTime startDate = _getStartDate();
     DateTime endDate = _getEndDate();
 
@@ -230,7 +235,10 @@ class _DetailedSalesHistoryScreenState
           // ডাটা লোড ও প্রদর্শন
           Expanded(
             child: StreamBuilder(
+              // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে sales কালেকশন কল করা হলো
               stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(uid)
                   .collection('sales')
                   .where(
                     'timestamp',
@@ -257,7 +265,7 @@ class _DetailedSalesHistoryScreenState
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          "এই সময়ে কোনো বিক্রির রেকর্ড নেই।",
+                          "এই সময়ে কোনো বিক্রির রেকর্ড নেই।",
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 16,

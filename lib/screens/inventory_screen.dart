@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+// আপডেট: ইউজারের uid নেওয়ার জন্য FirebaseAuth ইমপোর্ট করা হলো
+import 'package:firebase_auth/firebase_auth.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -43,9 +45,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
   // ফায়ারবেস থেকে সব পণ্যের নাম একবার লোড করে নেওয়া হচ্ছে
   Future<void> _loadProductNames() async {
     try {
+      // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে products কালেকশন লোড করা হচ্ছে
+      String uid = FirebaseAuth.instance.currentUser!.uid;
       QuerySnapshot productsSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
           .collection('products')
           .get();
+
       Map<String, String> tempNames = {};
       for (var doc in productsSnapshot.docs) {
         tempNames[doc.id] = doc['name'] ?? 'অজানা পণ্য';
@@ -80,6 +87,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     Timestamp startTimestamp = Timestamp.fromDate(startOfMonth);
     Timestamp endTimestamp = Timestamp.fromDate(endOfMonth);
+
+    // আপডেট: StreamBuilder-এর জন্য ইউজারের uid নেওয়া হচ্ছে
+    final String uid = FirebaseAuth.instance.currentUser!.uid;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
@@ -182,7 +192,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
                 Expanded(
                   child: StreamBuilder<QuerySnapshot>(
+                    // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে purchase_history কালেকশন কল করা হচ্ছে
                     stream: FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(uid)
                         .collection('purchase_history')
                         .where(
                           'timestamp',
@@ -408,7 +421,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  // সামারি কার্ড উইজেট আলাদা করা হয়েছে
+  // সামারি কার্ড উইজেট আলাদা করা হয়েছে
   Widget _buildSummaryCard(double totalInvestment) {
     return Container(
       width: double.infinity,
@@ -432,8 +445,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            children: [
+          Row(
+            children: const [
               Icon(
                 Icons.account_balance_wallet,
                 color: Colors.white70,

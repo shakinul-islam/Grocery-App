@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+// আপডেট: ইউজারের uid নেওয়ার জন্য FirebaseAuth ইমপোর্ট করা হলো
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ExpenseScreen extends StatefulWidget {
   const ExpenseScreen({super.key});
@@ -11,12 +13,24 @@ class ExpenseScreen extends StatefulWidget {
 }
 
 class _ExpenseScreenState extends State<ExpenseScreen> {
-  final CollectionReference _expenses = FirebaseFirestore.instance.collection(
-    'expenses',
-  );
-  final DocumentReference _budgetRef = FirebaseFirestore.instance
-      .collection('settings')
-      .doc('expense_budgets');
+  // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে expenses কালেকশন নেওয়ার জন্য getter
+  CollectionReference get _expenses {
+    String uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('expenses');
+  }
+
+  // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে budgets ডকুমেন্ট নেওয়ার জন্য getter
+  DocumentReference get _budgetRef {
+    String uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('settings')
+        .doc('expense_budgets');
+  }
 
   final TextEditingController _noteController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
@@ -24,13 +38,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   final Map<String, double> _monthlyBudgets = {};
   String? _selectedCategory;
 
+  // আপডেট: আপনার চাওয়া অনুযায়ী বাই-ডিফল্ট সব বাজেট ০.০ করে দেওয়া হলো যাতে ইউজার নিজে সেট করতে পারে
   final Map<String, dynamic> _defaultBudgets = {
-    'দোকান ভাড়া': 10000.0,
-    'কর্মচারীর বেতন': 15000.0,
-    'চা-নাস্তা': 3000.0,
-    'যাতায়াত': 2000.0,
-    'বিদ্যুৎ বিল': 2500.0,
-    'অন্যান্য': 5000.0,
+    'দোকান ভাড়া': 0.0,
+    'কর্মচারীর বেতন': 0.0,
+    'চা-নাস্তা': 0.0,
+    'যাতায়াত': 0.0,
+    'বিদ্যুৎ বিল': 0.0,
+    'অন্যান্য': 0.0,
   };
 
   @override
@@ -72,10 +87,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     await _budgetRef.set({'budgets': updatedBudgets}, SetOptions(merge: true));
   }
 
-  // এখানে updated logic ব্যবহার করা হয়েছে যাতে ডাটাবেস থেকে কি (Key) ডিলিট হয়
+  // এখানে updated logic ব্যবহার করা হয়েছে যাতে ডাটাবেস থেকে কি (Key) ডিলিট হয়
   Future<void> _deleteCategory(String categoryName) async {
     try {
-      // ১. Firestore-এর Map ফিল্ড থেকে ক্যাটাগরি ডিলিট করার সঠিক উপায়
+      // ১. Firestore-এর Map ফিল্ড থেকে ক্যাটাগরি ডিলিট করার সঠিক উপায়
       await _budgetRef.update({'budgets.$categoryName': FieldValue.delete()});
 
       // ২. ওই ক্যাটাগরির সমস্ত খরচ রেকর্ড ডিলিট করা

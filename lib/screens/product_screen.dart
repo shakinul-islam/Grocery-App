@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+// আপডেট: ইউজারের uid নেওয়ার জন্য FirebaseAuth ইমপোর্ট করা হলো
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ProductScreen extends StatefulWidget {
   const ProductScreen({super.key});
@@ -19,9 +21,14 @@ class _ProductScreenState extends State<ProductScreen> {
 
   String _searchQuery = "";
 
-  final CollectionReference _products = FirebaseFirestore.instance.collection(
-    'products',
-  );
+  // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে products কালেকশন নেওয়ার জন্য getter তৈরি করা হলো
+  CollectionReference get _products {
+    String uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('products');
+  }
 
   @override
   void dispose() {
@@ -182,6 +189,7 @@ class _ProductScreenState extends State<ProductScreen> {
                   if (name.isNotEmpty &&
                       buyPrice != null &&
                       sellPrice != null) {
+                    // এখানে _products সরাসরি ইউজারের নিজস্ব ফোল্ডার থেকে ডাটা সেভ করবে
                     DocumentReference docRef = await _products.add({
                       "name": name,
                       "buyPrice": buyPrice,
@@ -192,7 +200,11 @@ class _ProductScreenState extends State<ProductScreen> {
                     });
 
                     if (stock > 0) {
+                      // আপডেট: হিস্ট্রি সেভ করার সময় ইউজারের নিজস্ব ডিরেক্টরি কল করা হলো
+                      String uid = FirebaseAuth.instance.currentUser!.uid;
                       await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(uid)
                           .collection('purchase_history')
                           .add({
                             'productId': docRef.id,
@@ -387,7 +399,11 @@ class _ProductScreenState extends State<ProductScreen> {
 
                     double addedStock = newStock - oldStock;
                     if (addedStock > 0) {
+                      // আপডেট: স্টক যোগ হলে হিস্ট্রি সেভ করার সময় ইউজারের নিজস্ব ডিরেক্টরি
+                      String uid = FirebaseAuth.instance.currentUser!.uid;
                       await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(uid)
                           .collection('purchase_history')
                           .add({
                             'productId': docId,

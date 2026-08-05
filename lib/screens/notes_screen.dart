@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // FirebaseAuth যুক্ত করা হলো
 import 'package:intl/intl.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -83,7 +84,7 @@ class _NotesScreenState extends State<NotesScreen>
         ?.requestNotificationsPermission();
   }
 
-  // রিমাইন্ডার শিডিউল করা (Fixed Syntax)
+  // রিমাইন্ডার শিডিউল করা
   Future<void> _scheduleNotification(
     int id,
     String title,
@@ -91,15 +92,11 @@ class _NotesScreenState extends State<NotesScreen>
     DateTime scheduledTime,
   ) async {
     await flutterLocalNotificationsPlugin.zonedSchedule(
-      id: id, // আগে নাম দিতে হবে
-      title: title, // আগে নাম দিতে হবে
-      body: body, // আগে নাম দিতে হবে
-      scheduledDate: tz.TZDateTime.from(
-        scheduledTime,
-        tz.local,
-      ), // নাম দিতে হবে
+      id: id,
+      title: title,
+      body: body,
+      scheduledDate: tz.TZDateTime.from(scheduledTime, tz.local),
       notificationDetails: const NotificationDetails(
-        // নাম দিতে হবে
         android: AndroidNotificationDetails(
           'note_reminder_channel',
           'Note Reminders',
@@ -112,7 +109,6 @@ class _NotesScreenState extends State<NotesScreen>
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      // uiLocalNotificationDateInterpretation লাইনটি পুরোপুরি বাদ দেওয়া হয়েছে
     );
   }
 
@@ -173,9 +169,13 @@ class _NotesScreenState extends State<NotesScreen>
   void _addNote() async {
     if (_noteController.text.isNotEmpty) {
       String noteContent = _noteController.text;
+      String uid = FirebaseAuth.instance.currentUser!.uid; // ইউজারের UID সংগ্রহ
 
       if (_isEditing && _editingNoteId != null) {
+        // এডিট করার সময় ইউজারের নিজস্ব ডিরেক্টরিতে আপডেট করা
         DocumentReference docRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
             .collection('notes')
             .doc(_editingNoteId);
 
@@ -232,7 +232,10 @@ class _NotesScreenState extends State<NotesScreen>
           );
         }
       } else {
+        // নতুন নোট সেভ করার সময় ইউজারের নিজস্ব ডিরেক্টরিতে সেভ করা
         DocumentReference docRef = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
             .collection('notes')
             .add({
               'content': noteContent,
@@ -344,7 +347,8 @@ class _NotesScreenState extends State<NotesScreen>
                   debugPrint("Notification Cancel Error: $e");
                 }
               }
-              await note.reference.delete();
+              await note.reference
+                  .delete(); // রেফারেন্স অটোমেটিক সঠিক ইউজারের ফোল্ডারেই পয়েন্ট করবে
               if (mounted) Navigator.pop(context);
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -610,6 +614,9 @@ class _NotesScreenState extends State<NotesScreen>
 
   @override
   Widget build(BuildContext context) {
+    // ইউজারের UID সংগ্রহ করা হচ্ছে StreamBuilder এর জন্য
+    final String uid = FirebaseAuth.instance.currentUser!.uid;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FE),
       appBar: AppBar(
@@ -696,6 +703,8 @@ class _NotesScreenState extends State<NotesScreen>
       ),
       body: StreamBuilder(
         stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid) // ইউজারের নিজস্ব ডিরেক্টরি থেকে ডেটা লোড হচ্ছে
             .collection('notes')
             .orderBy('timestamp', descending: true)
             .snapshots(),

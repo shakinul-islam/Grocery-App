@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+// আপডেট: ইউজারের uid নেওয়ার জন্য FirebaseAuth ইমপোর্ট করা হলো
+import 'package:firebase_auth/firebase_auth.dart';
 import 'customer_profile_screen.dart';
 
 class DueScreen extends StatefulWidget {
@@ -12,9 +14,15 @@ class DueScreen extends StatefulWidget {
 }
 
 class _DueScreenState extends State<DueScreen> {
-  final CollectionReference _customers = FirebaseFirestore.instance.collection(
-    'customers',
-  );
+  // আপডেট: ইউজারের নিজস্ব ডিরেক্টরি থেকে কাস্টমার কালেকশন নেওয়ার জন্য getter তৈরি করা হলো
+  CollectionReference get _customers {
+    String uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('customers');
+  }
+
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
 
@@ -85,6 +93,7 @@ class _DueScreenState extends State<DueScreen> {
                   phone.isNotEmpty &&
                   amount != null &&
                   amount > 0) {
+                // আপডেট: এখানে _customers অটোমেটিক ইউজারের নির্দিষ্ট ফোল্ডার পয়েন্ট করবে
                 DocumentReference customerRef = _customers.doc(phone);
                 await customerRef.set({
                   'name': name,
@@ -139,6 +148,7 @@ class _DueScreenState extends State<DueScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: () async {
+              // আপডেট: সঠিক ইউজারের ডিরেক্টরি থেকেই ডিলিট হবে
               await _customers.doc(phone).delete();
               if (context.mounted) {
                 Navigator.pop(context);
@@ -195,14 +205,16 @@ class _DueScreenState extends State<DueScreen> {
 
           Expanded(
             child: StreamBuilder(
-              // এখানে where ফিল্টারটি সরিয়ে সরাসরি snapshots() ব্যবহার করা হয়েছে
-              stream: _customers.snapshots(), 
+              // আপডেট: _customers.snapshots() এখন সরাসরি ইউজারের নিজস্ব ডেটা নিয়ে আসবে
+              stream: _customers.snapshots(),
               builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(child: Text("বর্তমানে কোনো কাস্টমার নেই!"));
+                  return const Center(
+                    child: Text("বর্তমানে কোনো কাস্টমার নেই!"),
+                  );
                 }
 
                 // ফিল্টার ও সর্টিং লজিক
@@ -217,7 +229,9 @@ class _DueScreenState extends State<DueScreen> {
                 );
 
                 if (docs.isEmpty) {
-                  return const Center(child: Text("কোনো কাস্টমার পাওয়া যায়নি!"));
+                  return const Center(
+                    child: Text("কোনো কাস্টমার পাওয়া যায়নি!"),
+                  );
                 }
 
                 return ListView.builder(
@@ -291,7 +305,7 @@ class _DueScreenState extends State<DueScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   const Text(
-                                    "বকেয়া",
+                                    "বকেয়া",
                                     style: TextStyle(
                                       fontSize: 10,
                                       color: Colors.grey,
